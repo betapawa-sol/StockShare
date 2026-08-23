@@ -1,0 +1,139 @@
+// StockShare — Nigerian stock market trend, prediction & portfolio tool
+// Prisma 7 / SQLite for local dev. Swap the datasource + adapter to Postgres for production
+// (see README) — the schema itself is provider-agnostic aside from the notes below.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// --- Auth / Users -----------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  tier         String   @default("FREE") // "FREE" | "PREMIUM" — see src/lib/entitlements.ts
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  holdings        Holding[]
+  watchlist       WatchlistItem[]
+  recommendations Recommendation[]
+  snapshots       PortfolioSnapshot[]
+}
+
+// --- Market data --------------------------------------------------------------
+
+model Stock {
+  id       String @id @default(cuid())
+  symbol   String @unique // e.g. "DANGCEM"
+  name     String
+  sector   String
+
+  prices          DailyPrice[]
+  predictions     Prediction[]
+  holdings        Holding[]
+  watchlist       WatchlistItem[]
+  recommendations Recommendation[]
+}
+
+model DailyPrice {
+  id            String   @id @default(cuid())
+  stockId       String
+  date          DateTime
+  open          Float
+  high          Float
+  low           Float
+  close         Float
+  volume        Int
+  change        Float // absolute change vs previous close
+  changePercent Float
+
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([stockId, date])
+  @@index([date])
+}
+
+// --- Portfolio ------------------------------------------------------------------
+
+model Holding {
+  id           String   @id @default(cuid())
+  userId       String
+  stockId      String
+  quantity     Float
+  averageCost  Float // average price paid per share, in NGN
+  acquiredAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stockId])
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  stockId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stockId])
+}
+
+// Daily total portfolio value, captured once per ingestion run so we can chart performance over time.
+model PortfolioSnapshot {
+  id            String   @id @default(cuid())
+  userId        String
+  date          DateTime
+  totalValue    Float
+  totalCost     Float
+  gainLoss      Float
+  gainLossPct   Float
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+// --- Predictive analytics --------------------------------------------------------
+
+model Prediction {
+  id         String   @id @default(cuid())
+  stockId    String
+  date       DateTime
+  signal     String // "BUY" | "HOLD" | "SELL" — see src/lib/prediction.ts
+  score      Float // -1..1 confidence-weighted momentum score
+  method     String // e.g. "sma-momentum-v1"
+  rationale  String
+
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([stockId, date])
+  @@index([date])
+}
+
+model Recommendation {
+  id        String   @id @default(cuid())
+  userId    String
+  stockId   String
+  kind      String // "BUY_SIGNAL" | "SELL_SIGNAL" | "DIVERSIFY" | "CONCENTRATION_RISK"
+  reason    String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
