@@ -1,6 +1,5 @@
 // StockShare — Nigerian stock market trend, prediction & portfolio tool
-// Prisma 7 / SQLite for local dev. Swap the datasource + adapter to Postgres for production
-// (see README) — the schema itself is provider-agnostic aside from the notes below.
+// Prisma 7 / PostgreSQL, via the @prisma/adapter-pg driver adapter (see src/lib/db.ts).
 
 generator client {
   provider = "prisma-client"
@@ -8,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // --- Auth / Users -----------------------------------------------------------

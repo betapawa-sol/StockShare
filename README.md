@@ -26,28 +26,38 @@ signals, and portfolio-based recommendations — freemium, register-and-go.
 ## Stack
 
 Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 ·
-Prisma 7 + SQLite (dev) · Recharts · Zod · bcryptjs · jose.
+Prisma 7 + PostgreSQL · Recharts · Zod · bcryptjs · jose.
 
 This is a fairly new stack (Next 16, Prisma 7) with real breaking changes
 from older tutorials/training data — notably: `middleware.ts` is now
 `src/proxy.ts` exporting `proxy()`, route `params`/`cookies()` are async,
-and Prisma 7 requires a driver adapter (`@prisma/adapter-better-sqlite3`
-here) plus generates its client into `src/generated/prisma`.
+and Prisma 7 requires a driver adapter (`@prisma/adapter-pg` here) plus
+generates its client into `src/generated/prisma`.
 
 ## Getting started
 
+You need a Postgres database — a free local one is easiest for dev:
+
+```bash
+# macOS/Linux with Postgres installed:
+createuser stockshare --pwprompt --createdb
+createdb stockshare -O stockshare
+```
+
+Then:
+
 ```bash
 npm install
-npx prisma migrate dev   # creates prisma/dev.db and applies the schema
-npm run db:seed          # ~180 days of deterministic demo price history for 24 NGX tickers
+cp .env.example .env       # fill in DATABASE_URL (and SESSION_SECRET — see below)
+npx prisma migrate dev     # applies the schema
+npm run db:seed            # ~180 days of deterministic demo price history for 24 NGX tickers
 npm run predict           # snapshots today's trend signal for every stock
 npm run dev
 ```
 
-Then register an account at `/register` — no external services required
-for local dev. `.env` already has dev-only `DATABASE_URL` and
-`SESSION_SECRET` values; **generate a real `SESSION_SECRET`
-(`openssl rand -base64 32`) before deploying**.
+Then register an account at `/register`. Generate a real `SESSION_SECRET`
+with `openssl rand -base64 32` — don't reuse the same value across
+environments, and never commit it.
 
 ### Daily operations
 
@@ -101,17 +111,44 @@ depend on the `DataProvider` interface.
 - **`prisma/schema.prisma`** — `User`, `Stock`, `DailyPrice`, `Holding`,
   `WatchlistItem`, `PortfolioSnapshot`, `Prediction`, `Recommendation`.
 
-## Moving to production
+## Deploying on Vercel
 
-- **Database**: swap SQLite for Postgres — change the `datasource` block in
-  `prisma/schema.prisma` to `provider = "postgresql"`, swap
-  `@prisma/adapter-better-sqlite3` for `@prisma/adapter-pg`, update
-  `DATABASE_URL`, and re-run `prisma migrate dev`.
+The project is linked to Vercel and deploys automatically on every push to
+`main`. `npm run build` runs `prisma migrate deploy` before `next build`, so
+schema migrations apply automatically on each deploy — no manual migration
+step needed once `DATABASE_URL` is set.
+
+To finish setup (one-time):
+
+1. **Add a Postgres database** — Vercel dashboard → your project → *Storage*
+   tab → *Create Database* → Postgres (Neon-backed) or connect Neon/Supabase
+   yourself. Vercel sets `DATABASE_URL` (and a few `POSTGRES_*` aliases)
+   automatically when you use its native integration.
+2. **Set `SESSION_SECRET`** — Project → *Settings* → *Environment Variables*.
+   Generate one with `openssl rand -base64 32`. Required — the app throws on
+   boot without it in production.
+3. **Redeploy** (Vercel does this automatically after env vars change, or
+   trigger one manually from the Deployments tab). The build's
+   `prisma migrate deploy` step creates all the tables on first deploy.
+4. **Seed demo data** — the database starts empty (no stocks/prices), so the
+   dashboard has nothing to show until you seed it. Pull the production env
+   locally and run the seed scripts once:
+   ```bash
+   vercel env pull .env.production.local
+   DATABASE_URL=<paste the production DATABASE_URL> npm run db:seed
+   DATABASE_URL=<paste the production DATABASE_URL> npm run predict
+   ```
+   (Or point `MARKET_DATA_PROVIDER=scrape` at real NGX data instead — see
+   above — once the scraper is verified.)
+5. **Schedule daily ingestion** — add a [Vercel Cron](https://vercel.com/docs/cron-jobs)
+   job (or GitHub Action) that runs `npm run ingest && npm run predict`
+   after NGX market close each trading day.
+
+## Other production notes
+
 - **Billing**: `/account`'s upgrade button directly flips `User.tier` —
   replace `src/app/actions/account.ts` with a real Stripe/Paystack/Flutterwave
   integration (webhook sets `tier` on successful subscription).
-- **Scheduling**: wire `npm run ingest && npm run predict` into Vercel Cron
-  (or GitHub Actions) to run after NGX market close each trading day.
 - **Pricing page** numbers (`₦4,999/mo`) are placeholders — set real pricing
   once you've decided on a plan.
 

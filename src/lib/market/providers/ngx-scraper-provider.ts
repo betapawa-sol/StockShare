@@ -89,9 +89,10 @@ export class NgxScraperProvider implements DataProvider {
     return NGX_TICKERS.map(({ symbol, name, sector }) => ({ symbol, name, sector }));
   }
 
-  // `date` is unused: the public price list page only ever exposes the latest
-  // session, with no documented way to request a specific historical date.
-  async fetchDailyBars(_date: Date): Promise<DailyBar[]> {
+  async fetchDailyBars(date: Date): Promise<DailyBar[]> {
+    // The public price list only ever exposes the latest session, with no
+    // documented way to request a specific historical date — `date` is unused.
+    void date;
     const res = await fetch(this.sourceUrl, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; StockShareBot/1.0)" },
       // The public price list only ever shows the latest session; there's no
