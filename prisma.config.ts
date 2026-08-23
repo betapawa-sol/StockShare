@@ -8,6 +8,11 @@ export default defineConfig({
   migrations: {
     path: "prisma/migrations",
   },
+  // Used by the Prisma CLI (migrate deploy, etc). This install's Datasource
+  // type has no `directUrl` field, so DATABASE_URL must itself be a direct
+  // (non-pooled) connection — migrate deploy holds a session-level advisory
+  // lock that poolers like PgBouncer/Supavisor don't support. The app's
+  // runtime queries use a separate, poolable connection — see src/lib/db.ts.
   datasource: {
     url: process.env["DATABASE_URL"],
   },

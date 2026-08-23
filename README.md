@@ -116,17 +116,27 @@ depend on the `DataProvider` interface.
 The project is linked to Vercel and deploys automatically on every push to
 `main`. `npm run build` runs `prisma migrate deploy` before `next build`, so
 schema migrations apply automatically on each deploy — no manual migration
-step needed once `DATABASE_URL` is set.
+step needed once the env vars below are set.
 
 To finish setup (one-time):
 
 1. **Add a Postgres database** — Vercel dashboard → your project → *Storage*
-   tab → *Create Database* → Postgres (Neon-backed) or connect Neon/Supabase
-   yourself. Vercel sets `DATABASE_URL` (and a few `POSTGRES_*` aliases)
-   automatically when you use its native integration.
-2. **Set `SESSION_SECRET`** — Project → *Settings* → *Environment Variables*.
-   Generate one with `openssl rand -base64 32`. Required — the app throws on
-   boot without it in production.
+   tab → *Create Database* → Postgres (Neon-backed), or connect your own
+   Neon/Supabase project. Note both connection strings it gives you: the
+   **direct/non-pooled** one (Supabase: "Direct connection" /
+   `POSTGRES_URL_NON_POOLING`, port 5432) and the **pooled** one (Supabase:
+   "Transaction pooler" / `POSTGRES_PRISMA_URL`, port 6543).
+2. **Set env vars** — Project → *Settings* → *Environment Variables*:
+   - `DATABASE_URL` — the **direct/non-pooled** connection string. Used by
+     the Prisma CLI (`prisma migrate deploy`), which holds a session-level
+     advisory lock that connection poolers (PgBouncer/Supavisor) don't
+     support.
+   - `POSTGRES_PRISMA_URL` — the **pooled** connection string. Used by the
+     app at runtime (`src/lib/db.ts`); pooling matters because each
+     concurrent serverless invocation opens its own connection. Falls back
+     to `DATABASE_URL` if unset.
+   - `SESSION_SECRET` — generate with `openssl rand -base64 32`. Required —
+     the app throws on boot without it in production.
 3. **Redeploy** (Vercel does this automatically after env vars change, or
    trigger one manually from the Deployments tab). The build's
    `prisma migrate deploy` step creates all the tables on first deploy.
