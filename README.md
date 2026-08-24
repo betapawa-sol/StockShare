@@ -141,15 +141,25 @@ To finish setup (one-time):
    trigger one manually from the Deployments tab). The build's
    `prisma migrate deploy` step creates all the tables on first deploy.
 4. **Seed demo data** — the database starts empty (no stocks/prices), so the
-   dashboard has nothing to show until you seed it. Pull the production env
-   locally and run the seed scripts once:
-   ```bash
-   vercel env pull .env.production.local
-   DATABASE_URL=<paste the production DATABASE_URL> npm run db:seed
-   DATABASE_URL=<paste the production DATABASE_URL> npm run predict
-   ```
-   (Or point `MARKET_DATA_PROVIDER=scrape` at real NGX data instead — see
-   above — once the scraper is verified.)
+   dashboard has nothing to show until you seed it. Two ways to do this:
+
+   - **From your own machine**: pull the production env and run the seed
+     scripts once:
+     ```bash
+     vercel env pull .env.production.local
+     DATABASE_URL=<paste the production DATABASE_URL> npm run db:seed
+     DATABASE_URL=<paste the production DATABASE_URL> npm run predict
+     ```
+   - **From the deployed app itself**: set an `ADMIN_SECRET` env var on
+     Vercel (any random string — `openssl rand -hex 16`), redeploy, then
+     visit `https://<your-domain>/api/admin/seed?secret=<ADMIN_SECRET>`
+     once. This backfills ~180 days of deterministic demo history, snapshots
+     today's trend signals, *and* makes one real attempt at scraping NGX's
+     live price list for today's bar (falling back silently to demo data if
+     that fails — see the data-source caveat above). Safe to re-run; every
+     write is an idempotent upsert. Not meant to stay in regular use —
+     remove `ADMIN_SECRET` (or don't set it) once you've seeded, and use
+     scheduled ingestion (next step) going forward.
 5. **Schedule daily ingestion** — add a [Vercel Cron](https://vercel.com/docs/cron-jobs)
    job (or GitHub Action) that runs `npm run ingest && npm run predict`
    after NGX market close each trading day.
