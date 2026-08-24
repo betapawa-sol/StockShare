@@ -17,13 +17,15 @@ function createClient() {
   // Managed poolers (Supabase's Supavisor, etc.) commonly present a certificate
   // chain that isn't in Node's default trust store even with sslmode=require —
   // node-postgres now treats that mode as full verification, which then fails
-  // with "self-signed certificate in certificate chain". Relax verification
-  // only for connection strings that opted into SSL; plain local Postgres
-  // (no sslmode param) is unaffected.
-  const adapter = new PrismaPg({
-    connectionString,
-    ...(connectionString.includes("sslmode=") ? { ssl: { rejectUnauthorized: false } } : {}),
-  });
+  // with "self-signed certificate in certificate chain". Passing a separate
+  // `ssl` option to PrismaPg does NOT fix this: node-postgres's own
+  // ConnectionParameters always re-parses `connectionString` last and
+  // overwrites any explicit `ssl` field with what the string's `sslmode`
+  // implies. Rewriting `sslmode=require` to `sslmode=no-verify` instead keeps
+  // the connection encrypted but skips chain verification, and survives that
+  // parsing (pg-connection-string bakes it straight into the parsed config).
+  const relaxedConnectionString = connectionString.replace(/sslmode=require\b/, "sslmode=no-verify");
+  const adapter = new PrismaPg({ connectionString: relaxedConnectionString });
   return new PrismaClient({ adapter });
 }
 
